@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import datetime
 import uuid
-from typing import Any
+from typing import Any, Optional
 from urllib.parse import parse_qs, urlencode, urlparse, urlunparse
 
 from django.db import models
@@ -45,6 +45,16 @@ class Visitor(models.Model):
             "defaults to VISITOR_TOKEN_EXPIRY."
         ),
     )
+    visits_remaining = models.SmallIntegerField(
+        blank=True,
+        null=True,
+        help_text=_lazy("Number of sessions left for this visitor."),
+    )
+    visits_max = models.SmallIntegerField(
+        blank=True,
+        null=True,
+        help_text=_lazy("Set to blank for unlimited."),
+    )
     is_active = models.BooleanField(
         default=True,
         help_text=_lazy(
@@ -86,6 +96,10 @@ class Visitor(models.Model):
         return self.expires_at < tz_now()
 
     @property
+    def remaining(self) -> Optional[int]:
+        return self.visits_remaining
+
+    @property
     def is_valid(self) -> bool:
         """Return True if the token is active and not yet expired."""
         return self.is_active and not self.has_expired
@@ -94,8 +108,10 @@ class Visitor(models.Model):
         """Raise InvalidVisitorPass if inactive or expired."""
         if not self.is_active:
             raise InvalidVisitorPass("Visitor pass is inactive")
+        if self.visits_remaining == 0:
+            raise InvalidVisitorPass("No visits remaining")
         if self.has_expired:
-            raise InvalidVisitorPass("Visitor pass has expired")
+            raise InvalidVisitorPass(f"Visitor pass has expired: ({self.expires_at})")
 
     def serialize(self) -> dict:
         """
@@ -111,6 +127,8 @@ class Visitor(models.Model):
             "full_name": self.full_name,
             "email": self.email,
             "scope": self.scope,
+            "visits_remaining": self.visits_remaining,
+            "visits_max": self.visits_max,
             "context": self.context,
         }
 
@@ -133,6 +151,12 @@ class Visitor(models.Model):
         self.is_active = True
         self.expires_at = tz_now() + self.DEFAULT_TOKEN_EXPIRY
         self.save()
+
+    def decrement_remaining_visits(self) -> None:
+        """Decrement the remaining visit count if it is nonzero."""
+        if self.visits_remaining and self.visits_remaining > 0:
+            self.visits_remaining -= 1
+            self.save()
 
 
 class VisitorLogManager(models.Manager):

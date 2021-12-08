@@ -299,7 +299,7 @@ The test suite is handled by pytest & tox.
 Run suite in your environment:
 
 ```bash
-poetry run test
+poetry run pytest
 ```
 
 Run suite & extra checks in all supported environments:

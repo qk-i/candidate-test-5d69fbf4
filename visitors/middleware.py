@@ -24,8 +24,7 @@ class VisitorRequestMiddleware:
     def __call__(self, request: HttpRequest) -> HttpResponse:
         request.visitor = None
         request.user.is_visitor = False
-        visitor_uuid = request.GET.get(VISITOR_QUERYSTRING_KEY)
-        if not visitor_uuid:
+        if not (visitor_uuid := request.GET.get(VISITOR_QUERYSTRING_KEY)):
             return self.get_response(request)
         try:
             visitor = Visitor.objects.get(uuid=visitor_uuid)
@@ -68,7 +67,7 @@ class VisitorSessionMiddleware:
         # the session.
         if request.visitor:
             session.stash_visitor_uuid(request)
-            return self.get_response(request)
+            # return self.get_response(request)
 
         # We don't have a visitor object, but there may be one in the session
         if not (visitor_uuid := session.get_visitor_uuid(request)):
@@ -83,6 +82,7 @@ class VisitorSessionMiddleware:
             session.clear_visitor_uuid(request)
             return self.get_response(request)
         else:
+            visitor.decrement_remaining_visits()
             request.visitor = visitor
             request.user.is_visitor = True
 
